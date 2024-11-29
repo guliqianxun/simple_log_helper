@@ -2,7 +2,7 @@ import logging
 import threading
 from typing import Dict, Optional
 
-from custom_logger import CustomLogger
+from .custom_logger import CustomLogger
 
 
 class LoggerManager:
