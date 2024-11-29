@@ -2,7 +2,7 @@ import logging
 import time
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 
 class CustomLogger(logging.Logger):
@@ -10,9 +10,8 @@ class CustomLogger(logging.Logger):
     A custom logger class that extends the standard logging.Logger with additional features.
     """
 
-    # Class-level formatter to ensure consistency across all logger instances
     formatter = logging.Formatter(
-        '%(asctime)s [%(levelname)s] "%(name)s" (%(filename)s:%(lineno)d) %(message)s',
+        '%(asctime)s [%(levelname)s] "%(name)s" (%(filename)s:) %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
@@ -33,26 +32,25 @@ class CustomLogger(logging.Logger):
         """
         Initialize the logger by setting up file and console handlers.
         """
-        # Prevent adding duplicate handlers
-        if not self.handlers:
+        if not self.handlers:  # Prevent adding duplicate handlers
             try:
                 log_path = Path(self.log_filename)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Ensure the log file has a .log extension
-                if not log_path.suffix == '.log':
+                if log_path.suffix != '.log':
                     log_path = log_path.with_suffix('.log')
                     self.log_filename = str(log_path)
 
                 # File handler
-                handler_file = logging.FileHandler(self.log_filename, mode='a')
-                handler_file.setFormatter(self.formatter)
-                self.addHandler(handler_file)
+                file_handler = logging.FileHandler(self.log_filename, mode='a')
+                file_handler.setFormatter(self.formatter)
+                self.addHandler(file_handler)
 
                 # Console handler
-                handler_console = logging.StreamHandler()
-                handler_console.setFormatter(self.formatter)
-                self.addHandler(handler_console)
+                console_handler = logging.StreamHandler()
+                console_handler.setFormatter(self.formatter)
+                self.addHandler(console_handler)
             except OSError as e:
                 self.error(f"Failed to initialize logger: {e}")
                 raise
@@ -63,15 +61,30 @@ class CustomLogger(logging.Logger):
 
         Args:
             level (Any): The logging level as an integer or string.
+        """
+        if isinstance(level, str):
+            level = self._resolve_log_level(level)
+        super().setLevel(level)
 
+    @staticmethod
+    def _resolve_log_level(level: str) -> int:
+        """
+        Resolves a string log level to the corresponding numeric value.
+        
+        Args:
+            level (str): Log level as a string.
+        
+        Returns:
+            int: Corresponding logging level.
+        
         Raises:
             ValueError: If the provided level is invalid.
         """
-        if isinstance(level, str):
-            level = getattr(logging, level.upper(), None)
-            if level is None or not isinstance(level, int):
-                raise ValueError(f"Invalid log level: {level}")
-        super().setLevel(level)
+        level = level.upper()
+        try:
+            return getattr(logging, level)
+        except AttributeError:
+            raise ValueError(f"Invalid log level: {level}")
 
     def show_progress(self, progress: float, bar_length: int = 50) -> None:
         """
@@ -105,26 +118,3 @@ class CustomLogger(logging.Logger):
             self.info(f"Function '{func.__name__}' executed in {end_time - start_time:.4f} seconds")
             return result
         return wrapper
-
-if __name__ == "__main__":
-    logger = CustomLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    logger.debug("Debug message")
-    logger.info("Info message")
-    logger.warning("Warning message")
-    logger.error("Error message")
-    logger.critical("Critical message")
-    logger.show_progress(50)
-    @logger.log_function_call
-    def test_function():
-        time.sleep(1)
-    test_function()
-    config = {
-        'log_folder': './Logs',
-        'level': 'DEBUG',
-        'loggers': ['app', 'database', 'security'],
-        'logger_levels': {
-            'database': 'ERROR',
-            'security': 'WARNING'
-        }
-    }

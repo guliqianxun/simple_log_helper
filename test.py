@@ -29,11 +29,18 @@ logger_manager = LoggerManager(config)
 # Get loggers
 app_logger = logger_manager.get_logger('app')
 db_logger = logger_manager.get_logger('db')
+test_logger = logger_manager.get_logger('test')
 db_logger.info('This is an info message from db logger.')
+db_sub_logger = db_logger.getChild('sub')
+db_sub_logger.propagate = False
+db_sub_logger.info('This is a child logger message.')
+
 
 # Use the loggers
 app_logger.info('This is an info message from app logger.')
 db_logger.warning('This is a warning message from db logger.')
+test_logger.debug('This is a debug message from test logger.')
+test_logger.error('This is an error message from test logger.')
 
 # Use the custom methods
 @app_logger.log_function_call

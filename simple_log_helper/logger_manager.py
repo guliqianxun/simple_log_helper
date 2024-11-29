@@ -1,9 +1,8 @@
 import logging
+from typing import Optional
 import threading
-from typing import Dict, Optional
-
+from collections import defaultdict
 from .custom_logger import CustomLogger
-
 
 class LoggerManager:
     """
@@ -21,7 +20,7 @@ class LoggerManager:
         self.config = config or {}
         self.logger_folder = self.config.get('log_folder', './Logs')
         self.global_log_level = self.config.get('level', 'INFO').upper()
-        self.loggers: Dict[str, CustomLogger] = {}
+        self.loggers: defaultdict[str, CustomLogger] = defaultdict(CustomLogger)
 
         # Set the custom logger class for the logging module
         logging.setLoggerClass(CustomLogger)
@@ -58,7 +57,7 @@ class LoggerManager:
         Args:
             level (str): The logging level to set.
         """
-        log_level = level.upper()
+        log_level = self._resolve_log_level(level)
         for logger in self.loggers.values():
             logger.setLevel(log_level)
 
@@ -99,15 +98,15 @@ class LoggerManager:
         Returns:
             int: The effective logging level as an integer.
         """
-        global_level = self._get_log_level(self.global_log_level)
-        specific_level = self._get_log_level(logger_specific_level)
+        global_level = self._resolve_log_level(self.global_log_level)
+        specific_level = self._resolve_log_level(logger_specific_level)
         # Use the least verbose (higher numeric value) level
         return max(global_level, specific_level)
 
     @staticmethod
-    def _get_log_level(level_name: str) -> int:
+    def _resolve_log_level(level_name: str) -> int:
         """
-        Convert a logging level name to its corresponding numeric value.
+        Converts a logging level name to its corresponding numeric value.
 
         Args:
             level_name (str): The name of the logging level.
@@ -118,41 +117,7 @@ class LoggerManager:
         Raises:
             ValueError: If the logging level name is invalid.
         """
-        level = getattr(logging, level_name.upper(), None)
-        if level is None or not isinstance(level, int):
+        try:
+            return getattr(logging, level_name.upper())
+        except AttributeError:
             raise ValueError(f"Invalid log level: {level_name}")
-        return level
-
-if __name__ == "__main__":
-    # Example configuration
-    config = {
-        'log_folder': './Logs',
-        'level': 'INFO',
-        'loggers': ['app', 'db'],
-        'logger_levels': {
-            'db': 'WARNING',
-        }
-    }
-
-    # Initialize the LoggerManager with the configuration
-    logger_manager = LoggerManager(config)
-
-    # Get loggers
-    app_logger = logger_manager.get_logger('app')
-    db_logger = logger_manager.get_logger('db')
-    db_logger.info('This is an info message from db logger.')
-
-    # Use the loggers
-    app_logger.info('This is an info message from app logger.')
-    db_logger.warning('This is a warning message from db logger.')
-
-    # Use the custom methods
-    @app_logger.log_function_call
-    def sample_function(x, y):
-        return x + y
-
-    result = sample_function(5, 7)
-    app_logger.show_progress(75)
-
-    # Shutdown the loggers when done
-    logger_manager.shutdown()
