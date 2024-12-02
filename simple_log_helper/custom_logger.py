@@ -66,6 +66,10 @@ class CustomLogger(logging.Logger):
             level = self._resolve_log_level(level)
         super().setLevel(level)
 
+    def getChild(self, suffix):
+        sub_logger = super().getChild(suffix)
+        sub_logger.propagate = False
+        return sub_logger
     @staticmethod
     def _resolve_log_level(level: str) -> int:
         """

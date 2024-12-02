@@ -40,15 +40,14 @@ class LoggerManager:
         """
         with self._lock:
             if name not in self.loggers:
-                logger = logging.getLogger(name)
                 log_filename = f"{self.logger_folder}/{name}.log"
-                logger.log_filename = log_filename
                 logger_specific_level = self.config.get('logger_levels', {}).get(name, self.global_log_level).upper()
                 effective_level = self._get_effective_level(logger_specific_level)
-                logger.setLevel(effective_level)
-                logger._initialize_logger()
+                logger = CustomLogger(name, log_filename=log_filename, level=effective_level)
+                logger.propagate = False
                 self.loggers[name] = logger
             return self.loggers[name]
+
 
     def set_log_level(self, level: str) -> None:
         """
