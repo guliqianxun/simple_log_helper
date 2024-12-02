@@ -2,7 +2,8 @@ import logging
 import time
 from functools import wraps
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Dict, Optional, Union
+from logging.handlers import RotatingFileHandler
 
 
 class CustomLogger(logging.Logger):
@@ -15,45 +16,69 @@ class CustomLogger(logging.Logger):
         datefmt='%Y-%m-%d %H:%M:%S',
     )
 
-    def __init__(self, name: str, log_filename: str = "./Logs/default.log", level: int = logging.INFO):
+    def __init__(
+        self, 
+        name: str, 
+        log_filename: Optional[str] = None, 
+        level: Union[int, str] = logging.INFO,
+        max_log_size_mb: int = 10,
+        backup_count: int = 5,
+        custom_formatter: Optional[logging.Formatter] = None
+    ):
         """
-        Initialize a CustomLogger instance.
+        Initialize an enhanced logger with configurable parameters.
 
         Args:
-            name (str): The name of the logger.
-            log_filename (str): The file path for logging output.
-            level (int): The logging level.
+            name (str): Logger name
+            log_filename (str, optional): Log file path
+            level (int/str): Logging level
+            max_log_size_mb (int): Maximum log file size in megabytes
+            backup_count (int): Number of backup log files to keep
+            custom_formatter (Formatter, optional): Custom log formatter
         """
-        super().__init__(name, level)
+        super().__init__(name,level=level)
+        self.propagate = False
         self.log_filename = log_filename
-        self._initialize_logger()
+        self.max_log_size_mb = max_log_size_mb
+        self.backup_count = backup_count
+        self._initialize_logger(custom_formatter)
 
-    def _initialize_logger(self) -> None:
+    def _initialize_logger(self, custom_formatter: Optional[logging.Formatter] = None) -> None:
         """
-        Initialize the logger by setting up file and console handlers.
+        Set up logger with file and console handlers using advanced configuration.
         """
-        if not self.handlers:  # Prevent adding duplicate handlers
-            try:
+        try:
+            # Clear any existing handlers
+            if self.handlers:
+                for handler in self.handlers[:]:
+                    self.removeHandler(handler)
+
+            formatter = custom_formatter or self.DEFAULT_FORMATTER
+
+            # Console handler
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            self.addHandler(console_handler)
+
+            # File handler with rotation
+            if self.log_filename:
                 log_path = Path(self.log_filename)
                 log_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Ensure the log file has a .log extension
-                if log_path.suffix != '.log':
-                    log_path = log_path.with_suffix('.log')
-                    self.log_filename = str(log_path)
-
-                # File handler
-                file_handler = logging.FileHandler(self.log_filename, mode='a')
-                file_handler.setFormatter(self.formatter)
+                file_handler = RotatingFileHandler(
+                    log_path, 
+                    maxBytes=self.max_log_size_mb * 1024 * 1024,
+                    backupCount=self.backup_count
+                )
+                file_handler.setFormatter(formatter)
                 self.addHandler(file_handler)
 
-                # Console handler
-                console_handler = logging.StreamHandler()
-                console_handler.setFormatter(self.formatter)
-                self.addHandler(console_handler)
-            except OSError as e:
-                self.error(f"Failed to initialize logger: {e}")
-                raise
+            # Set logging level
+            self.setLevel(self._resolve_log_level(self.level))
+
+        except Exception as e:
+            print(f"Logger initialization failed: {e}")
+            raise
 
     def setLevel(self, level: Any) -> None:
         """
@@ -69,7 +94,11 @@ class CustomLogger(logging.Logger):
     def getChild(self, suffix):
         sub_logger = super().getChild(suffix)
         sub_logger.propagate = False
+        sub_logger.handlers.clear()  
+        for handler in self.handlers:
+            sub_logger.addHandler(handler)
         return sub_logger
+    
     @staticmethod
     def _resolve_log_level(level: str) -> int:
         """
@@ -103,22 +132,20 @@ class CustomLogger(logging.Logger):
         bar = '█' * filled_length + '-' * (bar_length - filled_length)
         self.info(f"Processing: [{bar}] {progress}%")
 
-    def log_function_call(self, func: Callable) -> Callable:
+    def time_execution(self, func: Callable) -> Callable:
         """
-        Decorator to log function calls and execution time.
-
-        Args:
-            func (Callable): The function to be decorated.
-
-        Returns:
-            Callable: The wrapped function.
+        Decorator to log function execution time and details.
         """
         @wraps(func)
         def wrapper(*args, **kwargs):
-            self.info(f"Calling function: {func.__name__} with args: {args}, kwargs: {kwargs}")
-            start_time = time.time()
-            result = func(*args, **kwargs)
-            end_time = time.time()
-            self.info(f"Function '{func.__name__}' executed in {end_time - start_time:.4f} seconds")
-            return result
+            start_time = time.perf_counter()
+            try:
+                self.info(f"Executing: {func.__name__}")
+                result = func(*args, **kwargs)
+                exec_time = time.perf_counter() - start_time
+                self.info(f"Function {func.__name__} completed in {exec_time:.4f} seconds")
+                return result
+            except Exception as e:
+                self.error(f"Error in {func.__name__}: {e}", exc_info=True)
+                raise
         return wrapper
